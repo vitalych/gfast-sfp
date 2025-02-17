@@ -9,13 +9,11 @@ The firmware is loaded using the Ethernet Boot Management protocol [1]. Once plu
 packets with type 0x6120. The format is not documented anywhere but can be recovered fairly easily from the ``libmetanoia.so``
 library in the router's firmware.
 
+I have got some inspiration from [3], a Golang implementation.
+
 Notes
 
-- This is work in progress.
-- The current version appears to load the firmware, but the module seems stuck at the end of the upload.
-- I tried it on both Mellanox Connect X3 card, the TPLink MC220L media converter, and the Edge Router 4. None of them work so far.
-- The Mellanox driver on Linux prints the following error when invoking ``ethtool -m`` right after loading the firmware:
-  ``MLX4_CMD_MAD_IFC Get Module ID attr(ff60) port(2) i2c_addr(50) offset(0) size(1): Response Mad Status(91c) - I2C bus is constantly busy``
+- This is work in progress. The initial prototype works on Debian 12 using the TPLink MC220L media converter.
 - The MT5321 module can be reset using the TX_Disable pin of the SFP module. I have no idea how to access that pin from
   stock Linux using any of the hardware I have. I wonder if this requires a special board, like the one ISPs have in their routers.
 
@@ -57,6 +55,6 @@ Related work
 [2] Utilities for working with Metanoia/Proscend [VDSL2 SFP Modems](https://github.com/jimdigriz/mt5311/).
     The EBM protocol for that modem is different from the MT5321.
 
-[3] Another attempt at making the MT5321 [work](https://www.spinics.net/lists/netdev/msg902178.html).
+[3] Golang implementation of the boot and management protocol for the MT5321 [work](https://github.com/lorenz/metanoia-ebm).
 
 [4] Firmware for Swisscom [routers](https://github.com/TheRaphael0000/SwisscomFirmwares). They took them offline unfortunately.

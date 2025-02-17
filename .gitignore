@@ -1,2 +1,4 @@
 fw
 fw-mips
+*.vscode
+*.pcap

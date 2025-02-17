@@ -22,7 +22,7 @@
 all: fw
 
 fw: *.cpp *.h
-	clang++ -Wall -g -O0 -o $@ main.cpp
+	clang++ -Wall -g -O0 -std=c++2b -o $@ main.cpp
 
 fw-mips: *.cpp *.h
 	mips-linux-gnu-gcc -static  -Wall -g -O0 -o $@ main.cpp -lstdc++
