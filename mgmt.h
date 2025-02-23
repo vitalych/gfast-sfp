@@ -301,7 +301,7 @@ public:
         }
 
         auto oid_result = std::get<oid_result_t>(ret->payload.value());
-        log::log(log::info, "read_mib type:{}", oid_result.data.type().name());
+        log::log(log::trace, "read_mib type:{}", oid_result.data.type().name());
         return std::any_cast<std::optional<T>>(oid_result.data);
     }
 

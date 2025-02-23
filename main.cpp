@@ -72,6 +72,88 @@ bool retry(std::function<bool()> func) {
     return false;
 }
 
+bool upload_firmware(nic_reader_writer_ptr_t nic, const std::string &firmware_path, macaddr_t new_mac) {
+    // Check if firmware is already uploaded.
+    auto mgmt = mgmt::ebm_t::create(nic, new_mac);
+    mgmt->start();
+
+    if (retry([&]() -> bool { return mgmt->connect(); })) {
+        log::log(log::info, "Firmware appears to be already loaded");
+        return true;
+    }
+
+    // Connect failed, assume no firmware.
+    auto boot = boot::ebm_boot_t::create(nic);
+    boot->start();
+
+    log::log(log::info, "associating...");
+
+    if (!retry([&]() -> bool { return boot->associate(new_mac); })) {
+        log::log(log::error, "Could not associate");
+        return false;
+    }
+
+    log::log(log::info, "initing firmware download...");
+    if (!boot->download_begin()) {
+        log::log(log::error, "Could not start uploading firmware");
+        return false;
+    }
+
+    log::log(log::info, "initing downloading firmware...");
+    if (!boot->download_firmware(firmware_path)) {
+        log::log(log::error, "Could not download firmware");
+        return false;
+    }
+
+    log::log(log::info, "downloading checksum...");
+    if (!boot->download_checksum()) {
+        log::log(log::error, "Could not download checksum");
+        return false;
+    }
+
+    log::log(log::info, "done.");
+    boot->stop();
+
+    return true;
+}
+
+mgmt::ebm_ptr_t init_sfp(nic_reader_writer_ptr_t nic, macaddr_t new_mac) {
+    auto mgmt = mgmt::ebm_t::create(nic, new_mac);
+    mgmt->start();
+
+    if (!mgmt->connect()) {
+        log::log(log::error, "Could not connect");
+        return nullptr;
+    }
+
+    if (!mgmt->write_mib<uint32_t>(mgmt::oid_log_control, htonl(0xfe))) {
+        log::log(log::error, "Could not write oid_log_control");
+        return nullptr;
+    }
+
+    if (!mgmt->write_mib<uint32_t>(mgmt::oid_console_control, htonl(2))) {
+        log::log(log::error, "Could not write oid_console_control");
+        return nullptr;
+    }
+
+    if (!mgmt->write_mib<uint8_t>(mgmt::oid_host_cmd, 1)) {
+        log::log(log::error, "Could not write oid_host_cmd");
+        return nullptr;
+    }
+
+    if (!mgmt->write_mib<uint8_t>(mgmt::oid_repeat_cmd, 1)) {
+        log::log(log::error, "Could not write oid_repeat_cmd");
+        return nullptr;
+    }
+
+    if (!mgmt->write_mib<bool>(mgmt::oid_cmd_status, true)) {
+        log::log(log::error, "Could not write oid_cmd_status");
+        return nullptr;
+    }
+
+    return mgmt;
+}
+
 int main(int argc, char **argv) {
     auto args = raw_args_t(argv + 1, argv + argc);
     auto parsed_args = parse_args(args);
@@ -105,69 +187,16 @@ int main(int argc, char **argv) {
         nic->set_pcap_writer(pcap);
     }
 
-    auto boot = boot::ebm_boot_t::create(nic);
-    boot->start();
-
-    log::log(log::info, "associating...");
-
-    if (!retry([&]() -> bool { return boot->associate(new_mac.value()); })) {
-        log::log(log::error, "Could not associate");
+    if (!upload_firmware(nic, parsed_args->firmware_path, new_mac.value())) {
+        log::log(log::error, "could not upload firmware {}", parsed_args->firmware_path);
         return -1;
     }
-
-    log::log(log::info, "initing firmware download...");
-    if (!boot->download_begin()) {
-        log::log(log::error, "Could not start uploading firmware");
-        return -1;
-    }
-
-    log::log(log::info, "initing downloading firmware...");
-    if (!boot->download_firmware(parsed_args->firmware_path)) {
-        log::log(log::error, "Could not download firmware");
-        return -1;
-    }
-
-    log::log(log::info, "downloading checksum...");
-    if (!boot->download_checksum()) {
-        log::log(log::error, "Could not download checksum");
-        return -1;
-    }
-
-    log::log(log::info, "done.");
-    boot->stop();
 
     sleep(2);
 
-    auto mgmt = mgmt::ebm_t::create(nic, new_mac.value());
-    mgmt->start();
-
-    if (!mgmt->connect()) {
-        log::log(log::error, "Could not connect");
-        return -1;
-    }
-
-    if (!mgmt->write_mib<uint32_t>(mgmt::oid_log_control, htonl(0xfe))) {
-        log::log(log::error, "Could not write oid_log_control");
-        return -1;
-    }
-
-    if (!mgmt->write_mib<uint32_t>(mgmt::oid_console_control, htonl(2))) {
-        log::log(log::error, "Could not write oid_console_control");
-        return -1;
-    }
-
-    if (!mgmt->write_mib<uint8_t>(mgmt::oid_host_cmd, 1)) {
-        log::log(log::error, "Could not write oid_host_cmd");
-        return -1;
-    }
-
-    if (!mgmt->write_mib<uint8_t>(mgmt::oid_repeat_cmd, 1)) {
-        log::log(log::error, "Could not write oid_repeat_cmd");
-        return -1;
-    }
-
-    if (!mgmt->write_mib<bool>(mgmt::oid_cmd_status, true)) {
-        log::log(log::error, "Could not write oid_cmd_status");
+    auto mgmt = init_sfp(nic, new_mac.value());
+    if (!mgmt) {
+        log::log(log::error, "could not init sfp");
         return -1;
     }
 

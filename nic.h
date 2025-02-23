@@ -190,22 +190,22 @@ public:
 
         packet.clear();
         packet.resize(1514);
-        auto &data = packet.get();
-        ret = recvfrom(m_fd->fd, data.data(), data.size(), 0, (struct sockaddr *) &m_sa, &addrlen);
+        auto data = packet.data();
+        ret = recvfrom(m_fd->fd, data, packet.size(), 0, (struct sockaddr *) &m_sa, &addrlen);
         if (ret < 0) {
             log::log(log::error, "recvfrom failed: {}", errno);
             return error;
         }
 
-        if (m_pcap && m_pcap->write_packet(data.data(), ret) < 0) {
+        packet.resize(ret);
+
+        if (m_pcap && m_pcap->write_packet(data, ret) < 0) {
             log::log(log::error, "could not write pcap file");
         }
 
-        packet.resize(ret);
-
         if (log::g_log_level <= log::trace) {
-            log::log(log::trace, "Received packet:");
-            hex_dump(data.data(), ret);
+            log::log(log::trace, "Received packet sz={:x}:", packet.size());
+            hex_dump(data, packet.size());
         }
 
         return ok;
