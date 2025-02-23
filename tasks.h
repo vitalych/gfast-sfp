@@ -28,6 +28,8 @@
 #include <optional>
 #include <thread>
 
+#include "log.h"
+
 class task_processor_t {
 private:
     nic_reader_writer_ptr_t m_nic;
@@ -40,7 +42,7 @@ private:
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     continue;
                 case nic_reader_writer_t::status_t::error:
-                    fprintf(stderr, "Could not read packet\n");
+                    log::log(log::error, "could not read packet");
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     continue;
                 case nic_reader_writer_t::status_t::ok:

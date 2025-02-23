@@ -136,7 +136,7 @@ protected:
     virtual void process_task(std::shared_ptr<packet_t> packet) {
         auto parsed = parse_packet(*packet);
         if (!parsed) {
-            fprintf(stderr, "could not parse packet\n");
+            log::log(log::error, "could not parse packet");
             return;
         }
 
@@ -147,7 +147,7 @@ protected:
             case access_type_t::MSG_CONSOLE_OUTPUT:
             case access_type_t::MSG_LOGGER_OUTPUT: {
                 auto str = std::get<std::string>(parsed->payload.value());
-                fprintf(stdout, "LOG: %s\n", str.c_str());
+                log::log(log::info, "LOG: {}", str);
             } break;
 
             case access_type_t::MSG_READ_MIB_RESP:
@@ -155,7 +155,7 @@ protected:
                 check_response(parsed.value());
                 break;
             default:
-                fprintf(stderr, "unsupported packet type: %#hhx\n", parsed->header.type);
+                log::log(log::error, "unsupported packet type: {:#x}", (uint8_t) parsed->header.type);
         }
     }
 
@@ -171,16 +171,16 @@ private:
         auto status = future.wait_for(std::chrono::seconds(1));
         switch (status) {
             case std::future_status::deferred:
-                fprintf(stderr, "deferred\n");
+                log::log(log::error, "deferred");
                 return std::nullopt;
             case std::future_status::timeout:
-                fprintf(stderr, "timeout\n");
+                log::log(log::error, "timeout");
                 return std::nullopt;
             case std::future_status::ready:
                 ret = future.get();
                 break;
             default:
-                fprintf(stderr, "unknown status from future\n");
+                log::log(log::error, "unknown status from future");
                 return std::nullopt;
         }
 
@@ -237,7 +237,7 @@ public:
 
                 } break;
                 default:
-                    fprintf(stderr, "unknown status: %hhu\n", ret.header.status);
+                    log::log(log::error, "unknown status: {}", (uint8_t) ret.header.status);
                     return false;
             }
         } while (tries-- > 0);
@@ -255,7 +255,7 @@ public:
     // data must be in network byte order for primitive types.
     template <typename T> bool write_mib(const oid_t &oid, T data) {
         if (!validate_oid_type<T>(oid.req.type)) {
-            fprintf(stderr, "Invalid mib type\n");
+            log::log(log::error, "Invalid mib type");
             return false;
         }
 
@@ -279,7 +279,7 @@ public:
 
     template <typename T> std::optional<T> read_mib(const oid_t &oid) {
         if (!validate_oid_type<T>(oid.req.type)) {
-            fprintf(stderr, "Invalid mib type\n");
+            log::log(log::error, "Invalid mib type");
             return false;
         }
 
@@ -301,7 +301,7 @@ public:
         }
 
         auto oid_result = std::get<oid_result_t>(ret->payload.value());
-        fprintf(stdout, "read_mib type:%s\n", oid_result.data.type().name());
+        log::log(log::info, "read_mib type:{}", oid_result.data.type().name());
         return std::any_cast<std::optional<T>>(oid_result.data);
     }
 
@@ -411,7 +411,7 @@ private:
             } break;
 
             default:
-                fprintf(stderr, "unsupported packet type: %#hhx\n", ret.header.type);
+                log::log(log::error, "unsupported packet type: {:x}", (uint8_t) ret.header.type);
         }
 
         return ret;
@@ -420,18 +420,18 @@ private:
     void check_response(const task_result_t &result) {
         auto task = m_current_task;
         if (!task) {
-            fprintf(stderr, "received packet without task\n");
+            log::log(log::error, "received packet without task");
             return;
         }
 
         if (result.header.type != task->expected_response_type) {
-            fprintf(stderr, "Unexpected response type: %#hhx\n", result.header.type);
+            log::log(log::error, "unexpected response type: {:#x}", (uint8_t) result.header.type);
             return;
         }
 
         if (result.header.seq_no != m_seqno) {
-            fprintf(stderr, "Unexpected sequence number, expected %x but got %x\n", m_seqno.load(),
-                    result.header.seq_no);
+            log::log(log::error, "unexpected sequence number, expected {:#x} but got {:#x}", m_seqno.load(),
+                     result.header.seq_no);
             return;
         }
 

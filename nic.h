@@ -42,6 +42,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include "log.h"
 #include "packet.h"
 #include "pcap.h"
 #include "utils.h"
@@ -67,11 +68,11 @@ private:
     }
 
     bool init() {
-        printf("Opening raw socket for %s\n", m_iface.c_str());
+        log::log(log::info, "Opening raw socket for {}", m_iface);
 
         m_fd = safefd_t::socket(PF_PACKET, SOCK_RAW, m_ether_type);
         if (!m_fd) {
-            fprintf(stderr, "Could not open socket: %d\n", errno);
+            log::log(log::error, "Could not open socket: {}", errno);
             return -1;
         }
 
@@ -84,22 +85,22 @@ private:
 
         int res = ioctl(fd, SIOCGIFFLAGS, &req);
         if (res < 0) {
-            fprintf(stderr, "Could not read mac address: %d\n", errno);
+            log::log(log::error, "Could not read mac address: {}", errno);
             return false;
         }
 
         if (!(req.ifr_flags & IFF_UP)) {
-            fprintf(stderr, "Interface %s is down: %#x\n", m_iface.c_str(), req.ifr_flags);
+            log::log(log::error, "Interface {} is down: {:#x}", m_iface, req.ifr_flags);
             return false;
         }
 
         res = ioctl(fd, SIOCGIFINDEX, &req);
         if (res < 0) {
-            fprintf(stderr, "Could not execute SIOCGIFINDEX: %d\n", errno);
+            log::log(log::error, "Could not execute SIOCGIFINDEX: {}", errno);
             return false;
         }
 
-        printf("iface index=%d\n", req.ifr_ifindex);
+        log::log(log::info, "iface index={}", req.ifr_ifindex);
 
         m_sa.sll_family = AF_PACKET;
         m_sa.sll_protocol = htons(EBM_ETH_TYPE);
@@ -107,13 +108,13 @@ private:
 
         res = bind(fd, (const struct sockaddr *) &m_sa, sizeof(m_sa));
         if (res < 0) {
-            fprintf(stderr, "Could not bind: %d\n", errno);
+            log::log(log::error, "Could not bind: {}", errno);
             return false;
         }
 
         res = ioctl(fd, SIOCGIFHWADDR, &req);
         if (res < 0) {
-            fprintf(stderr, "Could not get hw address: %d\n", errno);
+            log::log(log::error, "Could not get hw address: {}", errno);
             return false;
         }
 
@@ -148,17 +149,19 @@ public:
     }
 
     bool write_packet(const void *buffer, size_t size) {
-        printf("Sending packet sz=%#lx:\n", size);
-        hex_dump(buffer, size);
+        if (log::g_log_level <= log::trace) {
+            log::log(log::trace, "Sending packet sz={:#x}:", size);
+            hex_dump(buffer, size);
+        }
 
         int ret = sendto(m_fd->fd, buffer, size, 0, (struct sockaddr *) &m_sa, sizeof(m_sa));
         if (ret < 0) {
-            fprintf(stderr, "Could not send packet: %d\n", errno);
+            log::log(log::error, "Could not send packet: {}", errno);
             return false;
         }
 
         if (m_pcap && m_pcap->write_packet(buffer, sizeof(buffer)) < 0) {
-            fprintf(stderr, "could not write pcap file\n");
+            log::log(log::error, "could not write pcap file");
         }
 
         return true;
@@ -176,10 +179,10 @@ public:
 
         int ret = select(m_fd->fd + 1, &readfds, NULL, NULL, &timeout_value);
         if (ret < 0) {
-            fprintf(stderr, "Wait failed: %d\n", errno);
+            log::log(log::error, "Wait failed: {}", errno);
             return error;
         } else if (ret == 0) {
-            fprintf(stderr, "Wait timed out\n");
+            log::log(log::error, "Wait timed out");
             return timeout;
         }
 
@@ -190,18 +193,20 @@ public:
         auto &data = packet.get();
         ret = recvfrom(m_fd->fd, data.data(), data.size(), 0, (struct sockaddr *) &m_sa, &addrlen);
         if (ret < 0) {
-            fprintf(stderr, "recvfrom failed: %d\n", errno);
+            log::log(log::error, "recvfrom failed: {}", errno);
             return error;
         }
 
         if (m_pcap && m_pcap->write_packet(data.data(), ret) < 0) {
-            fprintf(stderr, "could not write pcap file\n");
+            log::log(log::error, "could not write pcap file");
         }
 
         packet.resize(ret);
 
-        printf("Received packet:\n");
-        hex_dump(data.data(), ret);
+        if (log::g_log_level <= log::trace) {
+            log::log(log::trace, "Received packet:");
+            hex_dump(data.data(), ret);
+        }
 
         return ok;
     }
