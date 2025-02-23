@@ -23,6 +23,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fstream>
+#include <functional>
 #include <inttypes.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
@@ -37,22 +38,26 @@
 #include <unistd.h>
 #include <vector>
 
+#include "args.h"
 #include "boot.h"
+#include "log.h"
 #include "mgmt.h"
 #include "nic.h"
 #include "pcap.h"
 #include "tasks.h"
 #include "utils.h"
 
-bool parse_mac(const char *str, macaddr_t mac) {
-    auto ret = sscanf(str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
+std::optional<macaddr_t> parse_mac(const std::string &str) {
+    macaddr_t mac;
+    auto ret =
+        sscanf(str.c_str(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
 
     if (ret != 6) {
-        fprintf(stderr, "Invalid mac: %s\n", str);
-        return false;
+        log::log(log::error, "Invalid mac: {}", str);
+        return std::nullopt;
     }
 
-    return true;
+    return mac;
 }
 
 bool retry(std::function<bool()> func) {
@@ -68,100 +73,110 @@ bool retry(std::function<bool()> func) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 4) {
-        fprintf(stderr, "Usage: %s eth0 00:0e:ad:33:44:56 /path/to/firmware\n", argv[0]);
+    auto args = raw_args_t(argv + 1, argv + argc);
+    auto parsed_args = parse_args(args);
+
+    if (!parsed_args || parsed_args->help) {
+        std::println("Usage: {} --iface eth0 /path/to/firmware", argv[0]);
+        std::println("Optional args:");
+        std::println("  --help");
+        std::println("  --log-level trace|debug|info|warn|error");
+        std::println("  --pcap-path /path/to/file.pcap           location of packet capture file");
+        std::println("  --hwaddr 00:0e:ad:33:44:56               new mac address for the sfp module");
         return -1;
     }
 
-    const char *iface = argv[1];
-    const char *new_macaddr = argv[2];
-    const char *firmware_path = argv[3];
-    macaddr_t new_mac = {0};
-    if (!parse_mac(new_macaddr, new_mac)) {
+    log::g_log_level = parsed_args->log_level;
+
+    auto new_mac = parse_mac(parsed_args->hwaddr);
+    if (!new_mac) {
         return -1;
     }
 
-    auto nic = nic_reader_writer_t::create(iface, EBM_ETH_TYPE);
+    auto nic = nic_reader_writer_t::create(parsed_args->iface, EBM_ETH_TYPE);
     if (!nic) {
-        fprintf(stderr, "Could not init %s\n", iface);
+        log::log(log::error, "Could not init {}", parsed_args->iface);
+        return -1;
     }
 
     // Write a pcap trace for debugging.
-    auto pcap = PCAPWriter::create("data.pcap");
-    nic->set_pcap_writer(pcap);
+    if (parsed_args->pcap_path) {
+        auto pcap = PCAPWriter::create(parsed_args->pcap_path.value());
+        nic->set_pcap_writer(pcap);
+    }
 
     auto boot = boot::ebm_boot_t::create(nic);
     boot->start();
 
-    fprintf(stdout, "associating...\n");
+    log::log(log::info, "associating...");
 
-    if (!retry([&]() -> bool { return boot->associate(new_mac); })) {
-        fprintf(stderr, "Could not associate\n");
+    if (!retry([&]() -> bool { return boot->associate(new_mac.value()); })) {
+        log::log(log::error, "Could not associate");
         return -1;
     }
 
-    fprintf(stdout, "initing firmware download...\n");
+    log::log(log::info, "initing firmware download...");
     if (!boot->download_begin()) {
-        fprintf(stderr, "Could not start uploading firmware\n");
+        log::log(log::error, "Could not start uploading firmware");
         return -1;
     }
 
-    fprintf(stdout, "initing downloading firmware...\n");
-    if (!boot->download_firmware(firmware_path)) {
-        fprintf(stderr, "Could not download firmware\n");
+    log::log(log::info, "initing downloading firmware...");
+    if (!boot->download_firmware(parsed_args->firmware_path)) {
+        log::log(log::error, "Could not download firmware");
         return -1;
     }
 
-    fprintf(stdout, "downloading checksum...\n");
+    log::log(log::info, "downloading checksum...");
     if (!boot->download_checksum()) {
-        fprintf(stderr, "Could not download checksum\n");
+        log::log(log::error, "Could not download checksum");
         return -1;
     }
 
-    fprintf(stdout, "done.\n");
+    log::log(log::info, "done.");
     boot->stop();
 
     sleep(2);
 
-    auto mgmt = mgmt::ebm_t::create(nic, new_mac);
+    auto mgmt = mgmt::ebm_t::create(nic, new_mac.value());
     mgmt->start();
 
     if (!mgmt->connect()) {
-        fprintf(stderr, "Could not connect\n");
+        log::log(log::error, "Could not connect");
         return -1;
     }
 
     if (!mgmt->write_mib<uint32_t>(mgmt::oid_log_control, htonl(0xfe))) {
-        fprintf(stderr, "Could not write oid_log_control\n");
+        log::log(log::error, "Could not write oid_log_control");
         return -1;
     }
 
     if (!mgmt->write_mib<uint32_t>(mgmt::oid_console_control, htonl(2))) {
-        fprintf(stderr, "Could not write oid_console_control\n");
+        log::log(log::error, "Could not write oid_console_control");
         return -1;
     }
 
     if (!mgmt->write_mib<uint8_t>(mgmt::oid_host_cmd, 1)) {
-        fprintf(stderr, "Could not write oid_host_cmd\n");
+        log::log(log::error, "Could not write oid_host_cmd");
         return -1;
     }
 
     if (!mgmt->write_mib<uint8_t>(mgmt::oid_repeat_cmd, 1)) {
-        fprintf(stderr, "Could not write oid_repeat_cmd\n");
+        log::log(log::error, "Could not write oid_repeat_cmd");
         return -1;
     }
 
     if (!mgmt->write_mib<bool>(mgmt::oid_cmd_status, true)) {
-        fprintf(stderr, "Could not write oid_cmd_status\n");
+        log::log(log::error, "Could not write oid_cmd_status");
         return -1;
     }
 
     while (true) {
         auto ticks = mgmt->read_mib<uint32_t>(mgmt::oid_ticks);
         if (ticks) {
-            fprintf(stdout, "ticks: %#08x\n", ticks.value());
+            log::log(log::info, "ticks: {}", ticks.value());
         } else {
-            fprintf(stderr, "could not read oid_ticks\n");
+            log::log(log::error, "could not read oid_ticks");
         }
         sleep(1);
     }
