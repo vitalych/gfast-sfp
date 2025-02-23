@@ -58,10 +58,6 @@ __attribute__((unused)) static void hex_dump(const void *data, size_t size) {
     }
 }
 
-static void dump_hw_addr(const uint8_t *addr) {
-    printf("MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
-}
-
 struct safefd_t;
 using safefd_ptr_t = std::shared_ptr<safefd_t>;
 

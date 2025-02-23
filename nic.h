@@ -48,9 +48,6 @@
 
 static const uint32_t EBM_ETH_TYPE = 0x6120;
 
-// TODO: use std::array
-using macaddr_t = uint8_t[6];
-
 class nic_reader_writer_t;
 using nic_reader_writer_ptr_t = std::shared_ptr<nic_reader_writer_t>;
 
@@ -120,7 +117,7 @@ private:
             return false;
         }
 
-        memcpy(m_macaddr, req.ifr_ifru.ifru_hwaddr.sa_data, sizeof(m_macaddr));
+        memcpy(m_macaddr.data(), req.ifr_ifru.ifru_hwaddr.sa_data, sizeof(m_macaddr));
 
         dump_hw_addr(m_macaddr);
 
@@ -209,8 +206,8 @@ public:
         return ok;
     }
 
-    const macaddr_t *get_mac_addr() const {
-        return &m_macaddr;
+    macaddr_t get_mac_addr() const {
+        return m_macaddr;
     }
 };
 

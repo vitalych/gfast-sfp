@@ -142,7 +142,7 @@ public:
         auto payload = associate_t{};
 
         payload.magic = htonl(0x00020304);
-        memcpy(payload.new_mac, new_mac, sizeof(payload.new_mac));
+        payload.new_mac = new_mac;
         payload.magic1 = htonl(1);
         payload.magic2 = htonl(2);
         payload.magic3 = htonl(3);
@@ -157,7 +157,7 @@ public:
             return false;
         }
 
-        memcpy(m_sfp_macaddr, new_mac, sizeof(m_sfp_macaddr));
+        m_sfp_macaddr = new_mac;
         return true;
     }
 
@@ -337,8 +337,8 @@ public:
 private:
     eth_header_t generate_eth_header() {
         eth_header_t ret;
-        memcpy(ret.dest_addr, m_sfp_macaddr, sizeof(macaddr_t));
-        memcpy(ret.source_addr, m_nic->get_mac_addr(), sizeof(macaddr_t));
+        ret.dest_addr = m_sfp_macaddr;
+        ret.source_addr = m_nic->get_mac_addr();
         ret.ether_type = htons(EBM_ETH_TYPE);
         return ret;
     }

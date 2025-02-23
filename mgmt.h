@@ -124,7 +124,7 @@ private:
     std::shared_ptr<task_t> m_current_task;
 
     ebm_t(nic_reader_writer_ptr_t nic, macaddr_t macaddr) : task_processor_t(nic), m_nic(nic) {
-        memcpy(m_sfp_macaddr, macaddr, sizeof(m_sfp_macaddr));
+        m_sfp_macaddr = macaddr;
     }
 
 public:
@@ -308,8 +308,8 @@ public:
 private:
     eth_header_t generate_eth_header() {
         eth_header_t ret;
-        memcpy(ret.dest_addr, m_sfp_macaddr, sizeof(macaddr_t));
-        memcpy(ret.source_addr, m_nic->get_mac_addr(), sizeof(macaddr_t));
+        ret.dest_addr = m_sfp_macaddr;
+        ret.source_addr = m_nic->get_mac_addr();
         ret.ether_type = htons(EBM_ETH_TYPE);
         return ret;
     }

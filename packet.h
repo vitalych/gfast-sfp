@@ -24,22 +24,35 @@
 
 #define __GFAST_PACKET_H__
 
+#include <bit>
 #include <inttypes.h>
 #include <optional>
 #include <stddef.h>
 #include <vector>
 
+#include "log.h"
+
+using macaddr_t = std::array<uint8_t, 6>;
+static_assert(sizeof(macaddr_t) == 6);
+
+static void dump_hw_addr(macaddr_t addr) {
+    log::log(log::debug, "MAC: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}\n", addr[0], addr[1], addr[2], addr[3],
+             addr[4], addr[5]);
+}
+
 // 14 bytes
 struct __attribute__((packed)) eth_header_t {
     // 0x00
-    uint8_t dest_addr[6];
+    macaddr_t dest_addr;
 
     // 0x06
-    uint8_t source_addr[6];
+    macaddr_t source_addr;
 
     // 0x0c
     uint16_t ether_type;
 };
+
+static_assert(sizeof(eth_header_t) == 14);
 
 class packet_t {
 private:
