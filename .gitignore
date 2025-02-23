@@ -2,3 +2,6 @@ fw
 fw-mips
 *.vscode
 *.pcap
+CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
