@@ -26,3 +26,4 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -stdlib=libc++")
 
 add_executable(fw main.cpp log.cpp)
 set_property(TARGET fw PROPERTY CXX_STANDARD 23)
+target_link_libraries(fw c++ c++abi)
