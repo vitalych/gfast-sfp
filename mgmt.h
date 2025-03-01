@@ -147,7 +147,7 @@ protected:
             case access_type_t::MSG_CONSOLE_OUTPUT:
             case access_type_t::MSG_LOGGER_OUTPUT: {
                 auto str = std::get<std::string>(parsed->payload.value());
-                log::log(log::info, "LOG: {}", str);
+                log::log(log::debug, "LOG: {}", str);
             } break;
 
             case access_type_t::MSG_READ_MIB_RESP:

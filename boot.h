@@ -27,6 +27,7 @@
 #include <inttypes.h>
 #include <memory>
 
+#include "log.h"
 #include "nic.h"
 #include "packet.h"
 #include "tasks.h"
@@ -81,7 +82,7 @@ protected:
     virtual void process_task(std::shared_ptr<packet_t> packet) {
         auto task = m_current_task;
         if (!task) {
-            fprintf(stderr, "received packet without task\n");
+            log::log(log::error, "received packet without task");
             return;
         }
 
@@ -103,16 +104,16 @@ private:
         auto status = future.wait_for(std::chrono::seconds(1));
         switch (status) {
             case std::future_status::deferred:
-                fprintf(stderr, "deferred\n");
+                log::log(log::error, "deferred");
                 return false;
             case std::future_status::timeout:
-                fprintf(stderr, "timeout\n");
+                log::log(log::error, "timeout");
                 return false;
             case std::future_status::ready:
                 ret = future.get();
                 break;
             default:
-                fprintf(stderr, "unknown status from future\n");
+                log::log(log::error, "unknown status from future");
                 return false;
         }
 
@@ -193,7 +194,7 @@ public:
     bool download_firmware(const std::string &path) {
         std::ifstream ifs(path, std::ios::binary);
         if (!ifs.good()) {
-            fprintf(stderr, "Could not open %s\n", path.c_str());
+            log::log(log::error, "Could not open {}", path.c_str());
             return false;
         }
 
@@ -211,17 +212,17 @@ public:
         }
 
         if (index == -1) {
-            fprintf(stderr, "could not find firmware signature\n");
+            log::log(log::error, "could not find firmware signature");
             return false;
         }
 
         if (ntohl(dbuf[0]) != 0x61232321) {
-            fprintf(stderr, "invalid header signature\n");
+            log::log(log::error, "invalid header signature");
             return false;
         }
 
         if (ntohl(dbuf[4]) != 0x20000) {
-            fprintf(stderr, "invalid header version\n");
+            log::log(log::error, "invalid header version");
             return false;
         }
 
@@ -235,8 +236,8 @@ public:
 
         uint32_t offset1 = ntohl(dbuf[12 + index * 8]);      // offset
         uint32_t offset2 = ntohl(dbuf[(index + 1) * 8 + 1]); // fw size
-        printf("offset1: %#x\n", offset1);
-        printf("offset2: %#x\n", offset2);
+        log::log(log::info, "offset1: {:#x}", offset1);
+        log::log(log::info, "offset2: {:#x}", offset2);
 
         ifs.seekg(offset1 + offset2, std::ios::beg);
 
@@ -246,11 +247,11 @@ public:
             record_data[i] = chr;
         }
 
-        printf("position: %#lx\n", (size_t) ifs.tellg());
+        log::log(log::info, "position: %#lx", (size_t) ifs.tellg());
 
         uint32_t fw_size = ntohl(dbuf[(index + 1) * 8 + 1]);
-        printf("firmware size: %#x\n", fw_size);
-        printf("record number: %#x\n", record_number);
+        log::log(log::info, "firmware size: {:#x}", fw_size);
+        log::log(log::info, "record number: {:#x}", record_number);
 
         ifs.seekg(offset1, std::ios::beg);
 
@@ -262,7 +263,7 @@ public:
             signature = signature << 8 | (uint8_t) chr;
         }
         m_signature = signature;
-        printf("signature: %#x\n", signature);
+        log::log(log::info, "signature: {:#x}", signature);
 
         uint32_t checksum = 0;
         for (int i = 0; i < 4; ++i) {
@@ -272,7 +273,7 @@ public:
             checksum = checksum << 8 | (uint8_t) chr;
         }
         m_checksum = checksum;
-        printf("checksum: %#x\n", checksum);
+        log::log(log::info, "checksum: {:#x}", checksum);
 
         auto pkt_hdr_size = 0x14;
         size_t packet_size = 0x5ea - pkt_hdr_size;
@@ -282,9 +283,9 @@ public:
         for (uint32_t i = 0; i < record_number; ++i) {
             size2 += record_data[i] * 4;
         }
-        printf("firmware size2: %#x\n", size2);
+        log::log(log::info, "firmware size2: {:#x}", size2);
 
-        printf("position: %#lx\n", (size_t) ifs.tellg());
+        log::log(log::info, "position: %#lx", (size_t) ifs.tellg());
 
         uint32_t total_copied = 0;
         uint32_t size = 0;
@@ -306,8 +307,8 @@ public:
             }
         }
 
-        printf("position: %#lx\n", (size_t) ifs.tellg());
-        printf("total_copied: %#x\n", total_copied);
+        log::log(log::info, "position: %#lx", (size_t) ifs.tellg());
+        log::log(log::info, "total_copied: {:#x}", total_copied);
 
         return true;
     }
@@ -378,17 +379,17 @@ private:
         packet_type_t received_type = (packet_type_t) ntohs(ebm.type);
 
         if (received_type != expected_type) {
-            fprintf(stderr, "Unexpected response type: %#x\n", received_type);
+            log::log(log::error, "Unexpected response type: {:#x}", (uint32_t) received_type);
             return false;
         }
 
         if (received_status != 0) {
-            fprintf(stderr, "Unexpected status: %#x\n", received_status);
+            log::log(log::error, "Unexpected status: {:#x}", received_status);
             return false;
         }
 
         if (received_seqno != m_seqno) {
-            fprintf(stderr, "Unexpected sequence number, expected %x but got %x\n", m_seqno.load(), received_seqno);
+            log::log(log::error, "Unexpected sequence number, expected %x but got %x", m_seqno.load(), received_seqno);
             return false;
         }
 
