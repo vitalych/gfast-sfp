@@ -93,6 +93,13 @@ struct __attribute__((packed)) access_header_t {
 
     // 0x7
     access_status_type_t status;
+
+    std::string to_string() const {
+        std::string ret;
+        std::format_to(std::back_inserter(ret), "[access_header_t type={:#x} seq_no={:#x} length={:#x} status={:#x}]",
+                       (uint32_t) type, seq_no, length, (uint32_t) status);
+        return ret;
+    }
 };
 
 struct __attribute__((packed)) challenge_t {
@@ -136,7 +143,7 @@ protected:
     virtual void process_task(std::shared_ptr<packet_t> packet) {
         auto parsed = parse_packet(*packet);
         if (!parsed) {
-            log::log(log::error, "could not parse packet");
+            log::log(log::error, "Could not parse packet");
             return;
         }
 
@@ -155,7 +162,7 @@ protected:
                 check_response(parsed.value());
                 break;
             default:
-                log::log(log::error, "unsupported packet type: {:#x}", (uint8_t) parsed->header.type);
+                log::log(log::error, "Unsupported packet type: {:#x}", (uint8_t) parsed->header.type);
         }
     }
 
@@ -171,16 +178,18 @@ private:
         auto status = future.wait_for(std::chrono::seconds(1));
         switch (status) {
             case std::future_status::deferred:
-                log::log(log::error, "deferred");
+                log::log(log::error, "Task deferred");
                 return std::nullopt;
             case std::future_status::timeout:
-                log::log(log::error, "timeout");
+                log::log(log::error, "Timeout executing task");
                 return std::nullopt;
             case std::future_status::ready:
+                log::log(log::debug, "Task completed resp_type={:#x} seq_no={:#x}",
+                         (uint32_t) task->expected_response_type, m_seqno.load());
                 ret = future.get();
                 break;
             default:
-                log::log(log::error, "unknown status from future");
+                log::log(log::error, "Unknown status from future");
                 return std::nullopt;
         }
 
@@ -197,6 +206,7 @@ public:
     }
 
     std::optional<task_result_t> connect1(const challenge_t &payload) {
+        log::log(log::debug, "Connect command f1={:#x} f2={:x}", payload.f1, payload.f2);
         auto eth_header = generate_eth_header();
         auto access_header = generate_access_header(access_type_t::MSG_CONNECT, access_status_type_t::DEFAULT_STATUS,
                                                     sizeof(challenge_t));
@@ -237,7 +247,7 @@ public:
 
                 } break;
                 default:
-                    log::log(log::error, "unknown status: {}", (uint8_t) ret.header.status);
+                    log::log(log::error, "Unknown status while connecting: {}", (uint8_t) ret.header.status);
                     return false;
             }
         } while (tries-- > 0);
@@ -315,8 +325,11 @@ private:
     }
 
     access_header_t generate_access_header(access_type_t type, access_status_type_t status, uint16_t payload_size) {
+        auto seqno = m_seqno.load();
+        log::log(log::debug, "Generating access header seqno={} type={:#x} status={:#x} payload_size={:#x}", seqno,
+                 (uint32_t) type, (uint32_t) status, payload_size);
         access_header_t ret;
-        ret.seq_no = htonl(m_seqno);
+        ret.seq_no = htonl(seqno);
         ret.type = type;
         ret.length = htons(payload_size);
         ret.status = status;
@@ -411,26 +424,27 @@ private:
             } break;
 
             default:
-                log::log(log::error, "unsupported packet type: {:x}", (uint8_t) ret.header.type);
+                log::log(log::error, "Unsupported packet type: {:x}", (uint8_t) ret.header.type);
         }
 
+        log::log(log::debug, "Got packet {}", access_hdr.to_string());
         return ret;
     }
 
     void check_response(const task_result_t &result) {
         auto task = m_current_task;
         if (!task) {
-            log::log(log::error, "received packet without task");
+            log::log(log::error, "Received packet without task");
             return;
         }
 
         if (result.header.type != task->expected_response_type) {
-            log::log(log::error, "unexpected response type: {:#x}", (uint8_t) result.header.type);
+            log::log(log::error, "Unexpected response type: {:#x}", (uint8_t) result.header.type);
             return;
         }
 
         if (result.header.seq_no != m_seqno) {
-            log::log(log::error, "unexpected sequence number, expected {:#x} but got {:#x}", m_seqno.load(),
+            log::log(log::error, "Unexpected sequence number, expected {:#x} but got {:#x}", m_seqno.load(),
                      result.header.seq_no);
             return;
         }

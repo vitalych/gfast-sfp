@@ -73,42 +73,43 @@ bool retry(std::function<bool()> func) {
 }
 
 bool upload_firmware(nic_reader_writer_ptr_t nic, const std::string &firmware_path, macaddr_t new_mac) {
-    // Connect failed, assume no firmware.
+    log::log(log::info, "Downloading firmware started: {}", firmware_path);
+
     auto boot = boot::ebm_boot_t::create(nic);
     boot->start();
 
-    log::log(log::info, "associating...");
-
+    log::log(log::info, "Associating to SFP module");
     if (!retry([&]() -> bool { return boot->associate(new_mac); })) {
         log::log(log::error, "Could not associate");
         return false;
     }
 
-    log::log(log::info, "initing firmware download...");
+    log::log(log::info, "Initializing firmware download...");
     if (!boot->download_begin()) {
-        log::log(log::error, "Could not start uploading firmware");
+        log::log(log::error, "Could not start downloading firmware");
         return false;
     }
 
-    log::log(log::info, "initing downloading firmware...");
+    log::log(log::info, "Downloading firmware...");
     if (!boot->download_firmware(firmware_path)) {
         log::log(log::error, "Could not download firmware");
         return false;
     }
 
-    log::log(log::info, "downloading checksum...");
+    log::log(log::info, "Downloading checksum...");
     if (!boot->download_checksum()) {
         log::log(log::error, "Could not download checksum");
         return false;
     }
 
-    log::log(log::info, "done.");
+    log::log(log::info, "Firmware download complete");
     boot->stop();
 
     return true;
 }
 
 mgmt::ebm_ptr_t init_sfp(nic_reader_writer_ptr_t nic, macaddr_t new_mac) {
+    log::log(log::info, "SFP module initialization started");
     auto mgmt = mgmt::ebm_t::create(nic, new_mac);
     mgmt->start();
 
@@ -174,12 +175,13 @@ int main(int argc, char **argv) {
 
     // Write a pcap trace for debugging.
     if (parsed_args->pcap_path) {
+        log::log(log::info, "Initializing pcap file {}", parsed_args->pcap_path.value());
         auto pcap = PCAPWriter::create(parsed_args->pcap_path.value());
         nic->set_pcap_writer(pcap);
     }
 
     if (!upload_firmware(nic, parsed_args->firmware_path, new_mac.value())) {
-        log::log(log::error, "could not upload firmware {}", parsed_args->firmware_path);
+        log::log(log::error, "Could not upload firmware {}", parsed_args->firmware_path);
         // Still try to connect.
     }
 
@@ -187,16 +189,18 @@ int main(int argc, char **argv) {
 
     auto mgmt = init_sfp(nic, new_mac.value());
     if (!mgmt) {
-        log::log(log::error, "could not init sfp");
+        log::log(log::error, "Could not initialize the module");
         return -1;
     }
+
+    log::log(log::info, "Initialization complete");
 
     while (true) {
         auto ticks = mgmt->read_mib<uint32_t>(mgmt::oid_ticks);
         if (ticks) {
-            log::log(log::info, "ticks: {}", ticks.value());
+            log::log(log::info, "Ticks: {}", ticks.value());
         } else {
-            log::log(log::error, "could not read oid_ticks");
+            log::log(log::error, "Could not read oid_ticks");
         }
         sleep(1);
     }

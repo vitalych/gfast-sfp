@@ -100,7 +100,7 @@ private:
             return false;
         }
 
-        log::log(log::info, "iface index={}", req.ifr_ifindex);
+        log::log(log::debug, "iface index={}", req.ifr_ifindex);
 
         m_sa.sll_family = AF_PACKET;
         m_sa.sll_protocol = htons(EBM_ETH_TYPE);
@@ -150,7 +150,7 @@ public:
 
     bool write_packet(const void *buffer, size_t size) {
         if (log::g_log_level <= log::trace) {
-            log::log(log::trace, "Sending packet sz={:#x}:", size);
+            log::log(log::trace, "Sending packet size={:#x}:", size);
             hex_dump(buffer, size);
         }
 
@@ -161,7 +161,7 @@ public:
         }
 
         if (m_pcap && m_pcap->write_packet(buffer, sizeof(buffer)) < 0) {
-            log::log(log::error, "could not write pcap file");
+            log::log(log::error, "Could not write pcap file");
         }
 
         return true;
@@ -182,7 +182,7 @@ public:
             log::log(log::error, "Wait failed: {}", errno);
             return error;
         } else if (ret == 0) {
-            log::log(log::error, "Wait timed out");
+            log::log(log::debug, "Wait timed out");
             return timeout;
         }
 
@@ -200,11 +200,11 @@ public:
         packet.resize(ret);
 
         if (m_pcap && m_pcap->write_packet(data, ret) < 0) {
-            log::log(log::error, "could not write pcap file");
+            log::log(log::error, "Could not write pcap file");
         }
 
         if (log::g_log_level <= log::trace) {
-            log::log(log::trace, "Received packet sz={:x}:", packet.size());
+            log::log(log::trace, "Received packet size={:x}:", packet.size());
             hex_dump(data, packet.size());
         }
 

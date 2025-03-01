@@ -25,6 +25,7 @@
 #define __GFAST_LOG_H__
 
 #include <chrono>
+#include <filesystem>
 #include <format>
 #include <iostream>
 #include <istream>
@@ -84,7 +85,8 @@ static inline void vlog(level_t level, const format_string &format, std::format_
     auto now = std::chrono::system_clock::now();
 
     const auto &loc = format.loc;
-    std::println("[{0:%F}T{0:%R%z}][{1:5}][{2:16}:{3:3}] {4}", now, level_to_str(level), truncate(loc.file_name(), 16),
+    const auto filename = std::filesystem::path(loc.file_name()).filename();
+    std::println("[{0:%F}T{0:%R%z}][{1:5}][{2:9}:{3:3}] {4}", now, level_to_str(level), truncate(filename, 9),
                  loc.line(), std::vformat(format.str, args));
 }
 
