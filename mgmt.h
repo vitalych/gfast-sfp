@@ -27,6 +27,7 @@
 #include <any>
 #include <inttypes.h>
 #include <memory>
+#include <mutex>
 #include <variant>
 
 #include "nic.h"
@@ -128,6 +129,7 @@ private:
     std::atomic<uint16_t> m_seqno = 1;
     macaddr_t m_sfp_macaddr = {0x0, 0xe, 0xad, 0x33, 0x44, 0x55};
 
+    std::mutex m_task_mutex;
     std::shared_ptr<task_t> m_current_task;
 
     ebm_t(nic_reader_writer_ptr_t nic, macaddr_t macaddr) : task_processor_t(nic), m_nic(nic) {
@@ -146,6 +148,8 @@ protected:
             log::log(log::error, "Could not parse packet");
             return;
         }
+
+        std::lock_guard<std::mutex> lock(m_task_mutex);
 
         switch (parsed->header.type) {
             case access_type_t::MSG_CONNECT_RESP:
@@ -169,9 +173,14 @@ protected:
 private:
     std::optional<task_result_t> execute_task(std::shared_ptr<task_t> task) {
         auto future = task->success.get_future();
-        m_current_task = task;
-        if (!m_nic->write_packet(m_current_task->request_packet)) {
-            return std::nullopt;
+
+        {
+            std::lock_guard<std::mutex> lock(m_task_mutex);
+
+            m_current_task = task;
+            if (!m_nic->write_packet(m_current_task->request_packet)) {
+                return std::nullopt;
+            }
         }
 
         std::optional<task_result_t> ret;
@@ -256,10 +265,12 @@ public:
     }
 
     oid_req_t hton(const oid_req_t &req) {
-        return oid_req_t{.oid = {htonl(req.oid[0]), htonl(req.oid[1]), htonl(req.oid[2])},
-                         .offset = htonl(req.offset),
-                         .length = htonl(req.length),
-                         .type = (oid_type_t) htonl((uint32_t) req.type)};
+        return oid_req_t{
+            .oid = {htonl(req.oid[0]), htonl(req.oid[1]), htonl(req.oid[2])},
+            .offset = htonl(req.offset),
+            .length = htonl(req.length),
+            .type = (oid_type_t) htonl((uint32_t) req.type),
+        };
     }
 
     // data must be in network byte order for primitive types.
@@ -451,8 +462,6 @@ private:
 
         task->success.set_value(result);
         m_current_task = nullptr;
-
-        m_seqno++;
     }
 };
 
