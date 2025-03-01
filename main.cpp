@@ -195,14 +195,23 @@ int main(int argc, char **argv) {
 
     log::log(log::info, "Initialization complete");
 
-    while (true) {
+    int error_count = 0;
+    while (error_count < 3) {
         auto ticks = mgmt->read_mib<uint32_t>(mgmt::oid_ticks);
         if (ticks) {
             log::log(log::info, "Ticks: {}", ticks.value());
+            error_count = 0;
         } else {
             log::log(log::error, "Could not read oid_ticks");
+            error_count++;
         }
+
         sleep(1);
+    }
+
+    if (error_count > 0) {
+        log::log(log::error, "Error while communicating with SFP module");
+        return -1;
     }
 
     return 0;
