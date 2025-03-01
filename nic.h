@@ -73,7 +73,7 @@ private:
         m_fd = safefd_t::socket(PF_PACKET, SOCK_RAW, m_ether_type);
         if (!m_fd) {
             log::log(log::error, "Could not open socket: {}", errno);
-            return -1;
+            return false;
         }
 
         auto fd = m_fd.get()->fd;
@@ -131,12 +131,12 @@ public:
             return nullptr;
         }
 
-        auto ret = new nic_reader_writer_t(iface, ether_type);
+        auto ret = nic_reader_writer_ptr_t(new nic_reader_writer_t(iface, ether_type));
         if (!ret->init()) {
             return nullptr;
         }
 
-        return nic_reader_writer_ptr_t(ret);
+        return ret;
     }
 
     void set_pcap_writer(PCAPWriterPtr pcap) {
