@@ -73,15 +73,6 @@ bool retry(std::function<bool()> func) {
 }
 
 bool upload_firmware(nic_reader_writer_ptr_t nic, const std::string &firmware_path, macaddr_t new_mac) {
-    // Check if firmware is already uploaded.
-    auto mgmt = mgmt::ebm_t::create(nic, new_mac);
-    mgmt->start();
-
-    if (retry([&]() -> bool { return mgmt->connect(); })) {
-        log::log(log::info, "Firmware appears to be already loaded");
-        return true;
-    }
-
     // Connect failed, assume no firmware.
     auto boot = boot::ebm_boot_t::create(nic);
     boot->start();
@@ -189,7 +180,7 @@ int main(int argc, char **argv) {
 
     if (!upload_firmware(nic, parsed_args->firmware_path, new_mac.value())) {
         log::log(log::error, "could not upload firmware {}", parsed_args->firmware_path);
-        return -1;
+        // Still try to connect.
     }
 
     sleep(2);
